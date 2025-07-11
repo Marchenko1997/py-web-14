@@ -3,6 +3,13 @@ from unittest.mock import AsyncMock
 from src.routes import auth
 from src.services import deps
 from src.main import app
+from urllib.parse import urlencode
+from src.database.models import User
+
+
+@pytest.fixture(autouse=True)
+def mock_redis(monkeypatch):
+    monkeypatch.setattr(deps, "get_redis", AsyncMock(return_value=AsyncMock()))
 
 
 # Мокаем отправку email
@@ -10,11 +17,6 @@ from src.main import app
 def mock_email(monkeypatch):
     monkeypatch.setattr(auth, "send_verification_email", AsyncMock())
 
-
-# Мокаем Redis
-@pytest.fixture(scope="module", autouse=True)
-def override_redis_dependency():
-    app.dependency_overrides[deps.get_redis] = AsyncMock(return_value=None)
 
 
 def test_signup_user(client, user):
@@ -25,33 +27,41 @@ def test_signup_user(client, user):
 
 
 def test_signup_duplicate_user(client, user):
-    # Создаем пользователя вручную
-    client.post("/api/auth/signup", json=user)
-
-    # Пытаемся создать его снова
-    response = client.post("/api/auth/signup", json=user)
+    client.post("/api/auth/signup", json=user)  
+    response = client.post("/api/auth/signup", json=user)  
     assert response.status_code == 409
     assert response.json()["detail"] == "Account already exists"
 
 
-def test_login_user(client, user):
-    # Убедимся, что пользователь зарегистрирован
+def test_login_user(client, session, user):
+    # Регистрируем пользователя
     client.post("/api/auth/signup", json=user)
+
+  
+    current_user: User = session.query(User).filter(User.email == user["email"]).first()
+    current_user.confirmed = True
+    session.commit()
+
 
     response = client.post(
         "/api/auth/login",
         data={"username": user["email"], "password": user["password"]},
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
-    assert response.status_code == 200
+
+    assert response.status_code == 200, response.text
     data = response.json()
-    assert "access_token" in data
     assert data["token_type"] == "bearer"
+    assert "access_token" in data
 
 
-def test_login_user_invalid_password(client, user):
-    # Убедимся, что пользователь зарегистрирован
+def test_login_user_invalid_password(client, session, user):
     client.post("/api/auth/signup", json=user)
+
+   
+    current_user: User = session.query(User).filter(User.email == user["email"]).first()
+    current_user.confirmed = True
+    session.commit()
 
     response = client.post(
         "/api/auth/login",
@@ -59,14 +69,14 @@ def test_login_user_invalid_password(client, user):
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
     assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid password"
+    assert response.json()["detail"] == "Invalid credentials"
 
 
-def test_login_user_not_found(client):
+def test_login_user_not_found(client, user):
     response = client.post(
         "/api/auth/login",
-        data={"username": "nonexistent@example.com", "password": "123456789"},
+        data={"username": "notfound@example.com", "password": user["password"]},
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
     assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid email"
+    assert response.json()["detail"] == "Invalid credentials"

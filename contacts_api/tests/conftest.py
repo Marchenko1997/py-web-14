@@ -1,4 +1,5 @@
 import os
+from unittest.mock import AsyncMock
 
 os.environ["DATABASE_URL"] = "sqlite:///./test.db"
 os.environ["SECRET_KEY"] = "test_secret"
@@ -53,9 +54,16 @@ def client(session):
             session.close()
 
     app.dependency_overrides[get_db] = override_get_db
+
+    app.state.redis = AsyncMock()
+
     return TestClient(app)
 
 
 @pytest.fixture
 def user():
-    return {"email": "deadpool@example.com", "password": "123456789"}
+    return {
+        "username": "deadpool@example.com",
+        "email": "deadpool@example.com",
+        "password": "123456789",
+    }

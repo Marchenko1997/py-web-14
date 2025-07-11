@@ -1,4 +1,20 @@
 import os
+
+os.environ["DATABASE_URL"] = "sqlite:///./test.db"
+os.environ["SECRET_KEY"] = "test_secret"
+os.environ["MAIL_USERNAME"] = "test@example.com"
+os.environ["MAIL_PASSWORD"] = "testpassword"
+os.environ["MAIL_FROM"] = "test@example.com"
+os.environ["MAIL_PORT"] = "587"
+os.environ["MAIL_SERVER"] = "smtp.example.com"
+os.environ["MAIL_FROM_NAME"] = "Test Mailer"
+os.environ["EMAIL_SECRET_KEY"] = "email_secret"
+os.environ["BASE_URL"] = "http://localhost:8000"
+os.environ["CLOUDINARY_NAME"] = "cloudinary_test"
+os.environ["CLOUDINARY_API_KEY"] = "fake_key"
+os.environ["CLOUDINARY_API_SECRET"] = "fake_secret"
+
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -7,20 +23,17 @@ from sqlalchemy.orm import sessionmaker
 from src.main import app
 from src.database.models import Base
 from src.database.db import get_db
-os.environ["DATABASE_URL"] = "sqlite:///./test.db"
 
 
+SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
 
-
-
-SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def session():
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
@@ -31,7 +44,7 @@ def session():
         db.close()
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def client(session):
     def override_get_db():
         try:
@@ -40,13 +53,9 @@ def client(session):
             session.close()
 
     app.dependency_overrides[get_db] = override_get_db
-    yield TestClient(app)
+    return TestClient(app)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def user():
-    return {
-        "username": "deadpool",
-        "email": "deadpool@example.com",
-        "password": "123456789",
-    }
+    return {"email": "deadpool@example.com", "password": "123456789"}

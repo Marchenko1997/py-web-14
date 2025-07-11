@@ -27,9 +27,11 @@ pydantic-settings = "^2.2"
 fastapi-limiter = "^0.1.6"
 redis = "^6.2.0"
 sphinx = "^8.2.3"
+pytest-mock = "^3.14.1"
 
 [tool.poetry.group.dev.dependencies]
 sphinx = "^8.2.3"
+httpx = "^0.28.1"
 
 [build-system]
 requires = ["poetry-core>=2.0.0"]

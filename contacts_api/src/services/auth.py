@@ -1,3 +1,11 @@
+"""
+This module handles authentication logic:
+- password hashing/verification
+- access/refresh token creation and decoding
+- user extraction from JWT and Redis caching
+- email confirmation token creation and decoding
+"""
+
 import os, json
 from datetime import datetime, timedelta, timezone
 from fastapi import Depends, HTTPException, status
@@ -17,19 +25,25 @@ REDIS_TTL = 60 * 15
 
 
 class Auth:
+    """
+    Provides authentication utilities such as:
+    - Password hashing
+    - JWT token generation and validation
+    - Current user resolution
+    """
     pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
     SECRET_KEY = os.getenv("SECRET_KEY", "secret")
     ALGORITHM = os.getenv("ALGORITHM", "HS256")
     EMAIL_SECRET_KEY = os.getenv("EMAIL_SECRET_KEY", SECRET_KEY)
 
-    # ---------------- хэши ---------------- #
+    # ---------- Password utils ----------
     def get_password_hash(self, password: str) -> str:
         return self.pwd_context.hash(password)
 
     def verify_password(self, plain: str, hashed: str) -> bool:
         return self.pwd_context.verify(plain, hashed)
 
-    # ---------------- токены -------------- #
+    # ---------- Token creation ----------
     async def _create(self, data: dict, minutes: int, scope: str) -> str:
         payload = data | {
             "exp": datetime.now(timezone.utc) + timedelta(minutes=minutes),
@@ -52,13 +66,16 @@ class Auth:
         except JWTError:
             raise HTTPException(status_code=401, detail="Invalid token")
 
-    # --------------- current user + Redis --------------- #
+    # ---------- Get current user ----------
     async def get_current_user(
         self,
         credentials: HTTPAuthorizationCredentials = Depends(http_bearer),
         db: Session = Depends(get_db),
         redis=Depends(get_redis), 
     ):
+        """
+        Extract current user from access token. Use Redis as cache, fallback to DB.
+        """
         token = credentials.credentials
         try:
             payload = jwt.decode(token, self.SECRET_KEY, algorithms=[self.ALGORITHM])
@@ -68,12 +85,11 @@ class Auth:
         except JWTError:
             raise HTTPException(status_code=401, detail="Invalid token")
 
-    
         cache_key = REDIS_KEY.format(email=email)  
         cached = await redis.get(cache_key)
         if cached:
             return json.loads(cached)  
-       
+
         user = await repository_users.get_user_by_email(email, db)
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
@@ -85,17 +101,18 @@ class Auth:
             "avatar": user.avatar,
         }
 
-       
         await redis.set(cache_key, json.dumps(user_data), ex=REDIS_TTL)
 
         return user_data
 
-    # --------------- email-токен --------------- #
+    # ---------- Email confirmation ----------
     async def create_email_token(self, data: dict) -> str:
+        """Generate email confirmation token valid for 24 hours"""
         payload = data | {"exp": datetime.now(timezone.utc) + timedelta(hours=24)}
         return jwt.encode(payload, self.EMAIL_SECRET_KEY, algorithm=self.ALGORITHM)
 
     async def get_email_from_token(self, token: str) -> str:
+        """Decode email confirmation token and extract email"""
         try:
             return jwt.decode(
                 token, self.EMAIL_SECRET_KEY, algorithms=[self.ALGORITHM]

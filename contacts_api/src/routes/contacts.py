@@ -11,6 +11,11 @@ from fastapi_limiter.depends import RateLimiter
 router = APIRouter(prefix="/contacts", tags=["contacts"])
 
 
+# Route: POST /contacts/
+# Purpose: Create a new contact for the authenticated user
+# Method: POST
+# Accepts: ContactCreate
+# Returns: ContactResponse
 @router.post(
     "/",
     response_model=ContactResponse,
@@ -24,6 +29,10 @@ def create(
     return repo.create_contact(db, contact, current_user)
 
 
+# Route: GET /contacts/
+# Purpose: Retrieve all contacts of the authenticated user
+# Method: GET
+# Returns: List of ContactResponse
 @router.get("/", response_model=List[ContactResponse])
 def read_all(
     db: Session = Depends(get_db),
@@ -32,6 +41,13 @@ def read_all(
     return repo.get_contacts(db, current_user)
 
 
+# Route: GET /contacts/{contact_id}
+# Purpose: Retrieve a single contact by ID
+# Method: GET
+# Accepts: contact_id (int)
+# Returns: ContactResponse
+# Status Codes:
+#   404 – contact not found
 @router.get("/{contact_id}", response_model=ContactResponse)
 def read_one(
     contact_id: int,
@@ -44,6 +60,13 @@ def read_one(
     return contact
 
 
+# Route: PUT /contacts/{contact_id}
+# Purpose: Update a contact by ID
+# Method: PUT
+# Accepts: contact_id (int), ContactUpdate
+# Returns: ContactResponse
+# Status Codes:
+#   404 – contact not found
 @router.put("/{contact_id}", response_model=ContactResponse)
 def update(
     contact_id: int,
@@ -57,6 +80,13 @@ def update(
     return updated_contact
 
 
+# Route: DELETE /contacts/{contact_id}
+# Purpose: Delete a contact by ID
+# Method: DELETE
+# Accepts: contact_id (int)
+# Returns: Deleted ContactResponse
+# Status Codes:
+#   404 – contact not found
 @router.delete("/{contact_id}", response_model=ContactResponse)
 def delete(
     contact_id: int,
@@ -69,6 +99,11 @@ def delete(
     return deleted_contact
 
 
+# Route: GET /contacts/search/{query}
+# Purpose: Search contacts by name or email
+# Method: GET
+# Accepts: query (str)
+# Returns: List of ContactResponse
 @router.get("/search/{query}", response_model=List[ContactResponse])
 def search(
     query: str,
@@ -78,6 +113,10 @@ def search(
     return repo.search_contacts(query, db, current_user)
 
 
+# Route: GET /contacts/birthdays/upcoming
+# Purpose: Get contacts with birthdays in the upcoming 7 days
+# Method: GET
+# Returns: List of ContactResponse
 @router.get("/birthdays/upcoming", response_model=List[ContactResponse])
 def birthdays(
     db: Session = Depends(get_db),

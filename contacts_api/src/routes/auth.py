@@ -18,7 +18,14 @@ from src.services.auth import REDIS_KEY, REDIS_TTL
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-# ───────── signup ───────── #
+# Route: POST /auth/signup
+# Purpose: Register a new user account
+# Method: POST
+# Accepts: UserModel (email, password)
+# Returns: UserResponse
+# Status Codes:
+#   201 – user created
+#   409 – email already registered
 @router.post("/signup", response_model=UserResponse, status_code=201)
 async def signup(body: UserModel, db: Session = Depends(get_db)):
     if await repository_users.get_user_by_email(body.email, db):
@@ -32,9 +39,13 @@ async def signup(body: UserModel, db: Session = Depends(get_db)):
     return user
 
 
-# ───────── login ───────── #
-
-
+# Route: POST /auth/login
+# Purpose: Authenticate user and issue access & refresh tokens
+# Method: POST
+# Accepts: OAuth2PasswordRequestForm (username, password)
+# Returns: TokenModel (access_token, refresh_token, token_type)
+# Status Codes:
+#   401 – invalid credentials or email not verified
 @router.post("/login", response_model=TokenModel)
 async def login(
     form: OAuth2PasswordRequestForm = Depends(),
@@ -51,7 +62,6 @@ async def login(
     refresh = await auth_service.create_refresh_token({"sub": user.email})
     await repository_users.update_token(user, refresh, db)
 
-  
     await redis.set(
         REDIS_KEY.format(email=user.email),
         json.dumps(
@@ -68,7 +78,13 @@ async def login(
     return {"access_token": access, "refresh_token": refresh, "token_type": "bearer"}
 
 
-# ─────── refresh ─────── #
+# Route: GET /auth/refresh_token
+# Purpose: Refresh access & refresh tokens
+# Method: GET
+# Accepts: Bearer token (refresh token)
+# Returns: TokenModel
+# Status Codes:
+#   401 – invalid or expired refresh token
 @router.get("/refresh_token", response_model=TokenModel)
 async def refresh_token(
     cred: HTTPAuthorizationCredentials = Security(http_bearer),
@@ -88,12 +104,16 @@ async def refresh_token(
     return {"access_token": access, "refresh_token": refresh, "token_type": "bearer"}
 
 
-# ───────── logout ───────── #
+# Route: POST /auth/logout
+# Purpose: Logout the user and clear refresh token
+# Method: POST
+# Accepts: Bearer token (access token)
+# Returns: 204 No Content
 @router.post("/logout", status_code=204)
 async def logout(
     cred: HTTPAuthorizationCredentials = Security(http_bearer),
     db: Session = Depends(get_db),
-    redis=Depends(get_redis),  # ✅ получаем Redis
+    redis=Depends(get_redis), 
 ):
     token = cred.credentials
     try:
@@ -109,7 +129,13 @@ async def logout(
         await redis.delete(REDIS_KEY.format(email=email)) 
 
 
-# ───── confirm email ───── #
+# Route: GET /auth/confirm_email/{token}
+# Purpose: Confirm user's email via token
+# Method: GET
+# Accepts: Email confirmation token in path
+# Returns: Confirmation message
+# Status Codes:
+#   404 – user not found
 @router.get("/confirm_email/{token}")
 async def confirm_email(token: str, db: Session = Depends(get_db)):
     email = await auth_service.get_email_from_token(token)
@@ -123,6 +149,13 @@ async def confirm_email(token: str, db: Session = Depends(get_db)):
     return {"message": "Email confirmed successfully"}
 
 
+# Route: POST /auth/request-reset-password
+# Purpose: Send password reset link to user's email
+# Method: POST
+# Accepts: RequestResetModel (email)
+# Returns: Success message
+# Status Codes:
+#   404 – user not found
 @router.post("/request-reset-password")
 async def request_reset_password(
     body: RequestResetModel, request: Request, db: Session = Depends(get_db)
@@ -143,6 +176,13 @@ async def request_reset_password(
     return {"message": "Ссылка для сброса пароля отправлена на email"}
 
 
+# Route: POST /auth/reset-password
+# Purpose: Reset user password using a token
+# Method: POST
+# Accepts: ResetPasswordModel (email, token, new_password)
+# Returns: Success message
+# Status Codes:
+#   400 – invalid or expired token
 @router.post("/reset-password")
 async def reset_password(
     body: ResetPasswordModel, request: Request, db: Session = Depends(get_db)

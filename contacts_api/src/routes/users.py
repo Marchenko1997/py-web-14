@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy.orm import Session
 import cloudinary
@@ -14,11 +13,20 @@ from src.schemas.users import UserResponse
 router = APIRouter(prefix="/users", tags=["users"])
 
 
+# Route: GET /users/me
+# Purpose: Get details of the currently authenticated user
+# Method: GET
+# Returns: UserResponse
 @router.get("/me", response_model=UserResponse)
 async def read_me(current_user: User = Depends(auth_service.get_current_user)):
     return current_user
 
 
+# Route: PATCH /users/avatar
+# Purpose: Upload or update user's avatar (image)
+# Method: PATCH
+# Accepts: Multipart file
+# Returns: Updated UserResponse with avatar URL
 @router.patch(
     "/avatar",
     response_model=UserResponse,

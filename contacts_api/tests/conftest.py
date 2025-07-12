@@ -1,5 +1,5 @@
 import os
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 os.environ["DATABASE_URL"] = "sqlite:///./test.db"
 os.environ["SECRET_KEY"] = "test_secret"
@@ -16,6 +16,7 @@ os.environ["CLOUDINARY_API_KEY"] = "fake_key"
 os.environ["CLOUDINARY_API_SECRET"] = "fake_secret"
 
 
+from fastapi_limiter import FastAPILimiter
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -32,6 +33,23 @@ engine = create_engine(
     SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+@pytest.fixture(autouse=True)
+def disable_rate_limiter(monkeypatch):
+    monkeypatch.setattr(
+        "fastapi_limiter.depends.RateLimiter", lambda *args, **kwargs: AsyncMock()
+    )
+    FastAPILimiter.redis = AsyncMock()
+
+    async def mock_identifier(request):
+        return "test_user"
+
+    async def mock_http_callback(request, response, pexpire):
+        pass  # просто ничего не делает, заглушка
+
+    FastAPILimiter.identifier = mock_identifier
+    FastAPILimiter.http_callback = mock_http_callback  # 👈 обязательно!
 
 
 @pytest.fixture(scope="function")
